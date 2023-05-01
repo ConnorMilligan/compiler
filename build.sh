@@ -1,0 +1,1 @@
+pyinstaller --onefile compiler.py

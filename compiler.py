@@ -2,6 +2,17 @@ from typing import Set, Dict, Tuple
 import sys
 import traceback
 
+# for handling command-line arguments
+import argparse
+
+# for compiling x86 to binary
+import subprocess
+import tempfile
+import os
+
+# for checking for an appropriate file extension of the binary
+import platform
+
 from cs202_support.python import *
 import cs202_support.x86 as x86
 import constants
@@ -1084,21 +1095,101 @@ def run_compiler(s, logging=False):
     global_logging = old_logging
     return current_program
 
+# sets up the argument parser and specifies the arguments to be parsed
+def argument_handler():
+    parser = argparse.ArgumentParser(description='Compile a program.')
+
+    parser.add_argument("input_file", help="Path to the input file")
+    parser.add_argument("-o", "--output", help="Path to the output file", default="output")
+    parser.add_argument("-S", help="Compile only; do not assemble or link.", action="store_true")
+
+    return parser.parse_args()
+
+# compiles the program to a binary file using the nasm and gcc compilers
+def compile_x86_assembly(assembly_code, c_source_file="./runtime.c"):
+    # Create temporary files
+    with tempfile.NamedTemporaryFile(suffix=".s", delete=False) as asm_file, \
+         tempfile.NamedTemporaryFile(suffix=".o", delete=False) as asm_obj_file, \
+         tempfile.NamedTemporaryFile(suffix=".o", delete=False) as c_obj_file, \
+         tempfile.NamedTemporaryFile(suffix=".bin", delete=False) as bin_file:
+
+        # Write assembly code to the temporary .s file
+        asm_file.write(assembly_code.encode())
+        asm_file.flush()
+
+        try:
+            # Assemble the .s file into an object file (.o) using GAS
+            gas_result = subprocess.run(["as", "-o", asm_obj_file.name, asm_file.name],
+                                          capture_output=True, text=True, check=True)
+        except FileNotFoundError:
+            raise RuntimeError("GNU Assembler (as) not found. Please ensure the GNU toolchain is installed.")
+        except subprocess.CalledProcessError:
+            error_message = f"GAS error:\n{gas_result.stderr}"
+            raise RuntimeError(error_message)
+
+        try:
+            # Compile the C source file into an object file
+            gcc_compile_result = subprocess.run(["gcc", "-c", "-o", c_obj_file.name, c_source_file],
+                                                capture_output=True, text=True, check=True)
+        except FileNotFoundError:
+            raise RuntimeError("gcc executable not found. Please ensure gcc is installed and added to the system's PATH.")
+        except subprocess.CalledProcessError:
+            error_message = f"gcc compile error:\n{gcc_compile_result.stderr}"
+            raise RuntimeError(error_message)
+
+        try:
+            # Link the object files to create a binary using gcc
+            gcc_link_result = subprocess.run(["gcc", "-o", bin_file.name, asm_obj_file.name, c_obj_file.name],
+                                             capture_output=True, text=True, check=True)
+        except FileNotFoundError:
+            raise RuntimeError("gcc executable not found. Please ensure gcc is installed and added to the system's PATH.")
+        except subprocess.CalledProcessError:
+            error_message = f"gcc link error:\n{gcc_link_result.stderr}"
+            raise RuntimeError(error_message)
+
+        # Read the binary data from the temporary .bin file
+        binary_data = bin_file.read()
+
+    # Remove temporary files
+    os.remove(asm_file.name)
+    os.remove(asm_obj_file.name)
+    os.remove(c_obj_file.name)
+    os.remove(bin_file.name)
+
+    return binary_data
 
 if __name__ == '__main__':
-    if len(sys.argv) != 2:
+    if len(sys.argv) < 2:
         print('Usage: python compiler.py <source filename>')
     else:
-        file_name = sys.argv[1]
-        with open(file_name) as f:
-            print(f'Compiling program {file_name}...')
+        args = argument_handler()
+
+        with open(args.input_file) as f:
+            print(f'Compiling program {args.input_file}...')
 
             try:
                 program = f.read()
-                x86_program = run_compiler(program, logging=True)
+                x86_program = run_compiler(program, logging=False)
 
-                with open(file_name + '.s', 'w') as output_file:
-                    output_file.write(x86_program)
+                if args.S:
+                    with open(args.output + '.s', 'w') as output_file:
+                        output_file.write(x86_program)
+                else:
+                    # Compile the x86 program to a binary file
+                    try:
+                        binary_data = compile_x86_assembly(x86_program)
+                        output_file_name = args.output
+
+                        if platform.system() == 'Windows':
+                            output_file_name += '.exe'
+                        else:
+                            output_file_name += '.out'
+
+                        # Save the binary data to a file
+                        with open(output_file_name, "wb") as f:
+                            f.write(binary_data)
+                    except RuntimeError as e:
+                        print(f"Compilation error:\n{e}")
 
             except:
                 print('Error during compilation! **************************************************')
