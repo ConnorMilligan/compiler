@@ -123,6 +123,7 @@ def typecheck(program: Program) -> Program:
                 elif isinstance(i, int):
                     return int
                 else:
+                    print("Constant is not a bool nor int. Type not supported.", i)
                     raise Exception('tc_exp', e)
             case Prim('tuple', args):
                 arg_types = [tc_exp(a, env) for a in args]
@@ -130,14 +131,16 @@ def typecheck(program: Program) -> Program:
                 return t
             case Prim('subscript', [e1, Constant(i)]):
                 t = tc_exp(e1, env)
-                assert isinstance(t, tuple)
+                if not isinstance(t, tuple):
+                    raise Exception('Trying to index a not-tuple object!', t)
                 return t[i]
             case Prim('eq', [e1, e2]):
                 assert tc_exp(e1, env) == tc_exp(e2, env)
                 return bool
             case Prim(op, args):
                 arg_types = [tc_exp(a, env) for a in args]
-                assert arg_types == prim_arg_types[op]
+                if not arg_types == prim_arg_types[op]:
+                    raise Exception('Arg types provided for op do not match preestablised arg types for op in env!')
                 return prim_output_types[op]
             case Begin(stmts, e):
                 tc_stmts(stmts, env)
@@ -146,7 +149,8 @@ def typecheck(program: Program) -> Program:
                 arg_types = [tc_exp(a, env) for a in args]
                 match tc_exp(func, env):
                     case Callable(param_types, return_type):
-                        assert param_types == arg_types
+                        if not param_types == arg_types:
+                            raise Exception('Param types and arg types do not match in function call!')
                         return return_type
                     case t:
                         raise Exception('expected function type, but got:', t)
@@ -167,12 +171,15 @@ def typecheck(program: Program) -> Program:
                 new_env['retval'] = return_type
                 tc_stmts(body_stmts, new_env)
             case Return(e):
-                assert env['retval'] == tc_exp(e, env)
+                if not (env['retval'] == tc_exp(e, env)):
+                    raise Exception('Return value not in type environment', e)
             case While(condition, body_stmts):
-                assert tc_exp(condition, env) == bool
+                if not tc_exp(condition, env) == bool:
+                    raise Exception('While condition not boolean!', condition)
                 tc_stmts(body_stmts, env)
             case If(condition, then_stmts, else_stmts):
-                assert tc_exp(condition, env) == bool
+                if not tc_exp(condition, env) == bool:
+                    raise Exception('If condition not boolean!', condition)
                 tc_stmts(then_stmts, env)
                 tc_stmts(else_stmts, env)
             case Print(e):
@@ -180,7 +187,8 @@ def typecheck(program: Program) -> Program:
             case Assign(x, e):
                 t_e = tc_exp(e, env)
                 if x in env:
-                    assert t_e == env[x]
+                    if not t_e == env[x]:
+                        raise Exception('Assignment statement does not match existing environment!', s)
                 else:
                     env[x] = t_e
             case _:
@@ -245,7 +253,7 @@ def rco(prog: Program) -> Program:
                           new_then_stmts,
                           new_else_stmts)
             case _:
-                raise Exception('rco_stmt', stmt)
+                raise Exception('Statement does not match cases in RCO!', stmt)
 
     def rco_stmts(stmts: List[Stmt]) -> List[Stmt]:
         new_stmts = []
