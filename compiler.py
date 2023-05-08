@@ -124,8 +124,7 @@ def typecheck(program: Program) -> Program:
                 elif isinstance(i, int):
                     return int
                 else:
-                    print("Constant is not a bool nor int. Type not supported.", i)
-                    raise Exception('tc_exp', e)
+                    raise Exception('Constant is not a bool nor int. Type not supported.', e)
             case Prim('tuple', args):
                 arg_types = [tc_exp(a, env) for a in args]
                 t = tuple(arg_types)
@@ -443,7 +442,7 @@ def explicate_control(prog: Program) -> cfun.CProgram:
             case Constant(c):
                 return cfun.Constant(c)
             case _:
-                raise RuntimeError(e)
+                raise RuntimeError("Atm not Var nor Constant", e)
 
     def explicate_exp(e: Expr) -> cfun.Expr:
         match e:
@@ -491,7 +490,8 @@ def explicate_control(prog: Program) -> cfun.CProgram:
                                cfun.Goto(e3_label))]
                 
             case _:
-                raise RuntimeError(stmt)
+                raise RuntimeError("Statement does not match any type supported in compiler:\n"
+                                   "FunctionDef, Return, Assign, Print, While, If", stmt)
 
     def explicate_stmts(stmts: List[Stmt], cont: List[cfun.Stmt]) -> List[cfun.Stmt]:
         for s in reversed(stmts):
@@ -550,7 +550,7 @@ def select_instructions(prog: cfun.CProgram) -> X86ProgramDefs:
                 else:
                     return x86.Var(x)
             case _:
-                raise Exception('si_atm', a)
+                raise Exception('Atomic not Constant nor Var', a)
 
     def si_stmts(stmts: List[cfun.Stmt]) -> List[x86.Instr]:
         instrs = []
@@ -602,7 +602,7 @@ def select_instructions(prog: cfun.CProgram) -> X86ProgramDefs:
                             x86.NamedInstr('movzbq', [x86.ByteReg('al'), x86.Var(x)])]
 
                 else:
-                    raise Exception('si_stmt failed op', op)
+                    raise Exception('Error in cfun.Assign block. op not in binop_instr nor op_cc. Review creation of these dictionaries', op)
             case cfun.Assign(x, cfun.Prim('not', [atm1])):
                 return [x86.NamedInstr('movq', [si_atm(atm1), x86.Var(x)]),
                         x86.NamedInstr('xorq', [x86.Immediate(1), x86.Var(x)])]
@@ -621,7 +621,7 @@ def select_instructions(prog: cfun.CProgram) -> X86ProgramDefs:
                         x86.JmpIf('e', then_label),
                         x86.Jmp(else_label)]
             case _:
-                raise Exception('si_stmt', stmt)
+                raise Exception('Stmt does not match supported types or parameters (or both)', stmt)
 
     def si_def(d: cfun.CFunctionDef) -> X86FunctionDef:
         nonlocal current_function
@@ -702,7 +702,8 @@ def _allocate_registers(name: str, program: x86.X86Program) -> x86.X86Program:
             case x86.GlobalVal(x):
                 return set()
             case _:
-                raise Exception('ul_arg', a)
+                raise Exception('Error in ul_arg: arg does not match supported types:\n'
+                                'Immediate, Reg, ByteReg, Var, Deref, GlobalVal', a)
 
     def reads_of(i: x86.Instr) -> Set[x86.Var]:
         match i:
@@ -720,7 +721,7 @@ def _allocate_registers(name: str, program: x86.X86Program) -> x86.X86Program:
                 if isinstance(i, (x86.Callq, x86.Set)):
                     return set()
                 else:
-                    raise Exception(i)
+                    raise Exception('Error in reads_of: x86 instruction described does not match supported types',i)
 
     def writes_of(i: x86.Instr) -> Set[x86.Var]:
         match i:
@@ -731,7 +732,7 @@ def _allocate_registers(name: str, program: x86.X86Program) -> x86.X86Program:
                 if isinstance(i, (x86.Jmp, x86.JmpIf, x86.Callq, x86.IndirectCallq, x86.Set)):
                     return set()
                 else:
-                    raise Exception(i)
+                    raise Exception('Error in writes_of: operation does not match supported types',i)
 
     # --------------------------------------------------
     # liveness analysis
@@ -846,7 +847,7 @@ def _allocate_registers(name: str, program: x86.X86Program) -> x86.X86Program:
             case x86.Var(x):
                 return homes[x86.Var(x)]
             case _:
-                raise Exception('ah_arg', a)
+                raise Exception('Error in ah_arg: argument does not match supported types', a)
 
     def ah_instr(e: x86.Instr) -> x86.Instr:
         match e:
@@ -860,7 +861,7 @@ def _allocate_registers(name: str, program: x86.X86Program) -> x86.X86Program:
                 if isinstance(e, (x86.Callq, x86.Retq, x86.Jmp, x86.JmpIf)):
                     return e
                 else:
-                    raise Exception('ah_instr', e)
+                    raise Exception('Error in ah_instr: instr does not match supported types', e)
 
     def ah_block(instrs: List[x86.Instr]) -> List[x86.Instr]:
         return [ah_instr(i) for i in instrs]
