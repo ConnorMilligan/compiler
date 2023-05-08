@@ -108,6 +108,7 @@ def typecheck(program: Program) -> Program:
         'lte':  bool,
     }
 
+
     def tc_exp(e: Expr, env: TEnv) -> Callable | Tuple | type:
         match e:
             case Var(x):
@@ -158,6 +159,7 @@ def typecheck(program: Program) -> Program:
                 raise Exception('tc_exp', e)
 
     def tc_stmt(s: Stmt, env: TEnv):
+        global please_count
         match s:
             case FunctionDef(name, params, body_stmts, return_type):
                 function_names.add(name)
@@ -1041,6 +1043,27 @@ def _prelude_and_conclusion(name: str, program: x86.X86Program) -> x86.X86Progra
 
 
 ##################################################
+# Politeness pass
+##################################################
+
+def politenessCheck(s: Stmt):
+        please_count = 0
+        
+        for stmt in s.stmts:
+            match stmt:
+                case Assign('PLEASE', _):
+                    please_count += 1
+
+        # Calculate the percentage of "please" statements in the code
+        please_ratio = please_count / len(s.stmts)
+        
+        # Check if the percentage is within the desired range
+        if please_ratio < 0.2:
+            raise Exception("Please be more polite! Add more 'please' statements.")
+        elif please_ratio > 0.4:
+            raise Exception("Please be less polite! Remove some 'please' statements.")
+
+##################################################
 # Compiler definition
 ##################################################
 
@@ -1080,6 +1103,9 @@ def run_compiler(s, logging=False):
         print(print_ast(current_program))
 
     current_program = parse(s)
+
+    # Test for politeness
+    politenessCheck(current_program)
 
     if logging == True:
         print()
