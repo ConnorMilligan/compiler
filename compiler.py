@@ -123,8 +123,7 @@ def typecheck(program: Program) -> Program:
                 elif isinstance(i, int):
                     return int
                 else:
-                    print("Constant is not a bool nor int. Type not supported.", i)
-                    raise Exception('tc_exp', e)
+                    raise Exception('Constant is not a bool nor int. Type not supported.', e)
             case Prim('tuple', args):
                 arg_types = [tc_exp(a, env) for a in args]
                 t = tuple(arg_types)
